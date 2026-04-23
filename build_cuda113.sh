@@ -43,9 +43,9 @@ echo "Available parameters:
 
 highlight "Installing system-wise packages ..."
 sudo apt-get update > /dev/null 2>&1 &&
-sudo apt -y install gcc-8 g++-8 # gcc-8 is a safe version 
-sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 8
-sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 8
+sudo apt -y install gcc-9 g++-9 # gcc-8 is a safe version 
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 9
+sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 9
 sudo apt-get install -y cmake
 sudo apt-get install -y \
   libglew-dev \
@@ -131,7 +131,7 @@ if [[ $* == *--build-dependencies* ]]; then
   cd ../..
 
   highlight "Installing Pangolin ..."
-  git_clone "git clone --recursive --depth=1 https://github.com/stevenlovegrove/Pangolin.git"
+  git_clone "git clone --branch v0.8 --recursive --depth=1 https://github.com/stevenlovegrove/Pangolin.git"
   cd Pangolin
   if [ ! -d build ]; then
     mkdir build

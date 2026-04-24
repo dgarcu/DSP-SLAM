@@ -85,6 +85,8 @@ public:
     std::string detection_path;  // path to associated detected instances
     cv::Mat GetCameraIntrinsics();
     void GetObjectDetectionsMono(KeyFrame *pKF);
+    // RGB-D (e.g. TUM RGB-D / Kinect)
+    void GetObjectDetectionsRGBD(KeyFrame *pKF);
     void AssociateObjectsByProjection(KeyFrame *pKF);  // assocating detection to object by projecting map points
 
 

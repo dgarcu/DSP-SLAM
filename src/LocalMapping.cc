@@ -86,7 +86,7 @@ void LocalMapping::Run()
             nKFInserted++;
             // cout << "Number of KF inserted: " << nKFInserted << endl;
 
-            if (mpTracker->mSensor == System::STEREO)
+            if (mpTracker->mSensor == System::STEREO || mpTracker->mSensor == System::RGBD)
             {
                 // Get new observations for map objects
                 GetNewObservations();
@@ -115,7 +115,7 @@ void LocalMapping::Run()
                 if(mpMap->KeyFramesInMap()>2)
                 {
                     // cout << "Entered Local BA Optimization!!!!!!!" << endl;
-                    if (mpTracker->mSensor == System::STEREO)
+                    if (mpTracker->mSensor == System::STEREO || mpTracker->mSensor == System::RGBD)
                     {
                         Optimizer::LocalJointBundleAdjustment(mpCurrentKeyFrame, &mbAbortBA, mpMap);
                     }

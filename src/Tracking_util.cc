@@ -286,5 +286,32 @@ void Tracking::AssociateObjectsByProjection(ORB_SLAM2::KeyFrame *pKF)
     }
 }
 
+/*
+ * Tracking utils for RGB-D input (e.g. TUM RGB-D / Kinect)
+ */
+void Tracking::GetObjectDetectionsRGBD(KeyFrame *pKF) {
+
+    PyThreadStateLock PyThreadLock;
+
+    py::list detections = mpSystem->pySequence.attr("get_frame_by_id")(pKF->mnFrameId);
+    for (auto det : detections) {
+        auto pts = det.attr("surface_points").cast<Eigen::MatrixXf>();
+        auto Sim3Tco = det.attr("T_cam_obj").cast<Eigen::Matrix4f>();
+        auto rays = det.attr("rays");
+        Eigen::MatrixXf rays_mat;
+        Eigen::VectorXf depth;
+        if (rays.is_none()) {
+            rays_mat = Eigen::Matrix<float, 0, 0>::Zero();
+            depth = Eigen::Vector<float, 0>::Zero();
+        } else {
+            rays_mat = rays.cast<Eigen::MatrixXf>();
+            depth = det.attr("depth").cast<Eigen::VectorXf>();
+        }
+        auto o = new ObjectDetection(Sim3Tco, pts, rays_mat, depth);
+        pKF->mvpDetectedObjects.push_back(o);
+    }
+    pKF->nObj = pKF->mvpDetectedObjects.size();
+    pKF->mvpMapObjects = vector<MapObject *>(pKF->nObj, static_cast<MapObject *>(NULL));
+}
 
 }

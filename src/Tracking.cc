@@ -1085,6 +1085,14 @@ void Tracking::CreateNewKeyFrame()
             ObjectDataAssociation(pKF);
         }
     }
+    else if (mSensor == System::RGBD)
+    {
+        GetObjectDetectionsRGBD(pKF);
+        if (!mpMap->GetAllMapObjects().empty())
+        {
+            ObjectDataAssociation(pKF);
+        }
+    }
     else if (mSensor == System::MONOCULAR)
     {
         std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();

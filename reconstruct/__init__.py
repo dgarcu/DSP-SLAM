@@ -17,6 +17,9 @@ def get_sequence(data_dir, configs):
     if configs.data_type == "KITTI":
         from .kitti_sequence import KITIISequence
         return KITIISequence(data_dir, configs)
+    if configs.data_type == "RGBD":
+        from .rgbd_sequence import RGBDSequence
+        return RGBDSequence(data_dir, configs)
     # We use a single class for Redwood and Freiburg sequence
     if configs.data_type == "Redwood" or configs.data_type == "Freiburg":
         from .mono_sequence import MonoSequence

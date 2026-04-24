@@ -25,8 +25,20 @@ from mmdet.models import build_detector
 from mmdet.core import get_classes
 from mmdet.apis import inference_detector
 
-
-object_class_table = {"cars": [2], "chairs": [56, 57]}
+object_class_table = {
+    "cars": [2], 
+    "chairs": [56, 57],
+    "monitors": [62],
+    "keyboards": [66],
+    "mouse": [64],
+    "cups": [41],
+    "bottles": [39],
+    "books": [73],
+    "laptops": [63],
+    "potted_plants": [58],
+    "tables": [60],
+    "persons": [0]
+}
 
 
 def get_detector2d(configs):
@@ -62,7 +74,8 @@ class Detector2D(object):
         self.predictions = None
 
     def make_prediction(self, image, object_class="cars"):
-        assert object_class == "chairs" or object_class == "cars"
+        if object_class not in object_class_table:
+            raise ValueError(f"Unknown object class: {object_class}. Available classes: {list(object_class_table.keys())}")
         self.predictions = inference_detector(self.model, image)
         boxes = [self.predictions[0][o] for o in object_class_table[object_class]]
         boxes = np.concatenate(boxes, axis=0)

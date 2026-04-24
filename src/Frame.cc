@@ -646,8 +646,8 @@ void Frame::ComputeStereoFromRGBD(const cv::Mat &imDepth)
     mvuRight = vector<float>(N,-1);
     mvDepth = vector<float>(N,-1);
 
-    cout << imDepth.type() << endl;
-    cout << imDepth << endl;
+    // cout << imDepth.type() << endl;
+    // cout << imDepth << endl;
 
     for(int i=0; i<N; i++)
     {

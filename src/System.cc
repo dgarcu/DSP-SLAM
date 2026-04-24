@@ -120,8 +120,8 @@ System::System(const string &strVocFile, const string &strSettingsFile, const st
     mptLocalMapping = new thread(&ORB_SLAM2::LocalMapping::Run,mpLocalMapper);
 
     //Initialize the Loop Closing thread and launch
-    // Only enable loop closing for KITTI
-    if (mSensor == STEREO)
+    // Only enable loop closing for KITTI and RGB-D
+    if (mSensor == STEREO || mSensor == RGBD)
     {
         mpLoopCloser = new LoopClosing(mpMap, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR);
         mptLoopClosing = new thread(&ORB_SLAM2::LoopClosing::Run, mpLoopCloser);

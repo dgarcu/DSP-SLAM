@@ -16,9 +16,35 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3 -march=native")
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
-find_package(OpenCV 3.2 REQUIRED)
+find_package(OpenCV REQUIRED)
+if(OpenCV_VERSION VERSION_LESS "3.2")
+    message(FATAL_ERROR "OpenCV >= 3.2 required. Found: ${OpenCV_VERSION}")
+endif()
+message(STATUS "Found OpenCV: ${OpenCV_VERSION}")
+
+# OpenCV 4.x removed some old C-style constants. Provide backward-compatibility defines.
+if(OpenCV_VERSION VERSION_GREATER_EQUAL "4.0.0")
+    add_compile_definitions(
+        CV_LOAD_IMAGE_UNCHANGED=-1
+        CV_RGB2GRAY=cv::COLOR_RGB2GRAY
+        CV_BGR2GRAY=cv::COLOR_BGR2GRAY
+        CV_RGBA2GRAY=cv::COLOR_RGBA2GRAY
+        CV_BGRA2GRAY=cv::COLOR_BGRA2GRAY
+    )
+endif()
+
 find_package(Eigen3 3.4.0 REQUIRED)
 find_package(Pangolin REQUIRED)
+
+# Pangolin was built with GCC 9+ and its pango_video target exports
+# -Wno-error=deprecated-copy and -Wno-error=pessimizing-move as
+# INTERFACE_COMPILE_OPTIONS. GCC 8 doesn't know these warnings at all,
+# so passing them causes compilation errors. Clear the options.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0")
+    if(TARGET pango_video)
+        set_target_properties(pango_video PROPERTIES INTERFACE_COMPILE_OPTIONS "")
+    endif()
+endif()
 
 include_directories(
         ${PROJECT_SOURCE_DIR}
@@ -82,3 +108,7 @@ target_link_libraries(dsp_slam ${PROJECT_NAME})
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 add_executable(dsp_slam_mono dsp_slam_mono.cc)
 target_link_libraries(dsp_slam_mono ${PROJECT_NAME})
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
+add_executable(dsp_slam_rgbd dsp_slam_rgbd.cc)
+target_link_libraries(dsp_slam_rgbd ${PROJECT_NAME})

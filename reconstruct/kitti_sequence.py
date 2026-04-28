@@ -105,10 +105,26 @@ class FrameWithLiDAR:
         else:
             label_path_3d = os.path.join(self.lbl3d_dir,  "%06d.lbl" % self.frame_id)
             detections_3d = torch.load(label_path_3d)
+            # 3dmood format: [x_cam, y_cam, length, width, height, z_cam, ry]
+            # Code expects:  [x_velo, y_velo, z_velo, w, l, h, theta_velo]
+            T_velo_cam = np.linalg.inv(self.T_cam_velo)
+            # Camera-frame centers use cols 0, 1, 5 (x_cam, y_cam, z_cam)
+            trans_cam = np.column_stack([detections_3d[:, 0],
+                                         detections_3d[:, 1],
+                                         detections_3d[:, 5]])
+            trans_cam_hom = np.hstack([trans_cam, np.ones((detections_3d.shape[0], 1))])
+            trans_velo = (T_velo_cam @ trans_cam_hom.T).T[:, :3]
+            converted = np.zeros_like(detections_3d)
+            converted[:, :3] = trans_velo                # x_velo, y_velo, z_velo
+            converted[:, 3] = detections_3d[:, 3]        # w = col 3 (width)
+            converted[:, 4] = detections_3d[:, 2]        # l = col 2 (length)
+            converted[:, 5] = detections_3d[:, 4]        # h = col 4 (height)
+            converted[:, 6] = detections_3d[:, 6]        # heading (ry, kept as-is for now)
+            detections_3d = converted
         t2 = get_time()
         print("3D detector takes %f seconds" % (t2 - t1))
 
-        # sort according to depth order
+        # sort according to depth order (x = forward in velodyne frame)
         depth_order = np.argsort(detections_3d[:, 0])
         detections_3d = detections_3d[depth_order, :]
         for n in range(detections_3d.shape[0]):
@@ -170,6 +186,16 @@ class FrameWithLiDAR:
         masks_2d = det_2d["pred_masks"]
         bboxes_2d = det_2d["pred_boxes"]
 
+        n_dets = masks_2d.shape[0]
+        print(f"  Frame {self.frame_id}: {n_dets} 2D dets, {len(self.instances)} 3D dets")
+        if n_dets > 0:
+            areas = np.array([(box[2] - box[0]) * (box[3] - box[1]) for box in bboxes_2d])
+            mask_areas = np.array([masks_2d[i].sum() for i in range(n_dets)])
+            print(f"    bbox area  — min:{areas.min():.0f}  max:{areas.max():.0f}  avg:{areas.mean():.0f}  total:{areas.sum():.0f}")
+            print(f"    mask area  — min:{mask_areas.min():.0f}  max:{mask_areas.max():.0f}  avg:{mask_areas.mean():.0f}")
+            for i, (box, area, marea) in enumerate(zip(bboxes_2d, areas, mask_areas)):
+                print(f"    det {i}: bbox=[{box[0]:.1f},{box[1]:.1f},{box[2]:.1f},{box[3]:.1f}] bbox_area={area:.0f} mask_area={marea:.0f}")
+
         # If no 2D detections, return right away
         if masks_2d.shape[0] == 0:
             return
@@ -177,8 +203,14 @@ class FrameWithLiDAR:
         # Occlusion masks
         occ_mask = np.full([img_h, img_w], False, dtype=np.bool)
         prev_mask = None
-        for instance in self.instances:
+        n_behind = 0
+        n_no_overlap = 0
+        n_mask_too_small = 0
+        n_with_rays = 0
+        for inst_idx, instance in enumerate(self.instances):
             if not instance.is_front:
+                n_behind += 1
+                print(f"    3D det {inst_idx}: DROPPED (behind camera)")
                 continue
             # Project LiDAR points to image plane
             surface_points = instance.surface_points
@@ -187,17 +219,22 @@ class FrameWithLiDAR:
             in_fov = (pixels_uv[:, 0] > 0) & (pixels_uv[:, 0] < img_w) & \
                      (pixels_uv[:, 1] > 0) & (pixels_uv[:, 1] < img_h)
             pixels_coord = pixels_uv[in_fov].astype(np.int32)
+            if pixels_coord.shape[0] > 0:
+                print(f"    3D det {inst_idx}: {pixels_coord.shape[0]} pts project to "
+                      f"u=[{pixels_coord[:,0].min()},{pixels_coord[:,0].max()}] "
+                      f"v=[{pixels_coord[:,1].min()},{pixels_coord[:,1].max()}]")
             # Check all the n 2D masks, and see how many projected points are inside them
             points_in_masks = [masks_2d[n, pixels_coord[:, 1], pixels_coord[:, 0]] for n in range(masks_2d.shape[0])]
             num_matches = np.array([points_in_mask[points_in_mask].shape[0] for points_in_mask in points_in_masks])
             max_num_matchess = num_matches.max()
 
-            if max_num_matchess > pixels_coord.shape[0] * 0.5:
+            if max_num_matchess >= 10 or max_num_matchess > pixels_coord.shape[0] * 0.5:
                 n = np.argmax(num_matches)
                 instance.mask = masks_2d[n, ...]
                 instance.bbox = bboxes_2d[n, ...]
+                mask_area = instance.mask[instance.mask].shape[0]
 
-                if instance.mask[instance.mask].shape[0] > self.min_mask_area:
+                if mask_area > self.min_mask_area:
                     # Sample non-surface pixels
                     non_surface_pixels = self.pixels_sampler(instance.bbox, instance.mask)
                     if non_surface_pixels.shape[0] > 200:
@@ -208,12 +245,24 @@ class FrameWithLiDAR:
                     # rays contains all, but depth should only contain foreground
                     instance.rays = get_rays(pixels_inside_bb, self.invK).astype(np.float32)
                     instance.depth = surface_points[:, 2].astype(np.float32)
+                    n_with_rays += 1
+                    print(f"    3D det {inst_idx}: OK — matched 2D det {n} (overlap={max_num_matchess}/{pixels_coord.shape[0]}, mask_area={mask_area})")
+                else:
+                    n_mask_too_small += 1
+                    print(f"    3D det {inst_idx}: DROPPED (mask_area={mask_area} <= min={self.min_mask_area})")
 
                 # Create occlusion mask
                 if prev_mask is not None:
                     occ_mask = occ_mask | prev_mask
                 instance.occ_mask = occ_mask
                 prev_mask = masks_2d[n, ...]
+            else:
+                n_no_overlap += 1
+                print(f"    3D det {inst_idx}: DROPPED (overlap={max_num_matchess}/{pixels_coord.shape[0]} <= 50%)")
+
+        print(f"  Frame {self.frame_id} summary: {len(self.instances)} 3D dets → "
+              f"{n_behind} behind camera, {n_no_overlap} no overlap, "
+              f"{n_mask_too_small} mask too small, {n_with_rays} fully used")
 
 
 class KITIISequence:

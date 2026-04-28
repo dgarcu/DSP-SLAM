@@ -26,7 +26,40 @@ def config_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--map_dir', type=str, required=True, help='path to map directory')
     parser.add_argument('-c', '--config', type=str, required=True, help='path to config file')
+    parser.add_argument('--display-voxel-size', type=float, default=None,
+                        help='Voxel size for display-only downsampling (does not affect saved file)')
+    parser.add_argument('--point-size', type=float, default=1.0,
+                        help='Rendered point size (default: 1.0)')
+    parser.add_argument('--height-axis', type=str, default='-y',
+                        choices=['x', 'y', 'z', '-x', '-y', '-z'],
+                        help='World axis used as height for coloring (default: -y for KITTI camera convention)')
     return parser
+
+
+def voxel_downsample(points, voxel_size):
+    indices = np.floor(points / voxel_size).astype(np.int64)
+    _, unique = np.unique(indices, axis=0, return_index=True)
+    return points[unique]
+
+
+def height_colormap(points, axis='-y'):
+    """Color points by height axis: blue (low) → cyan → green → yellow → red (high)."""
+    ax = {'x': 0, 'y': 1, 'z': 2, '-x': 0, '-y': 1, '-z': 2}[axis]
+    z = points[:, ax] * (-1 if axis.startswith('-') else 1)
+    t = (z - z.min()) / (z.max() - z.min() + 1e-9)
+
+    colors = np.zeros((len(t), 3))
+    bands = [
+        (0.00, 0.25, lambda s: np.c_[np.zeros_like(s),               s,               np.ones_like(s)]),
+        (0.25, 0.50, lambda s: np.c_[np.zeros_like(s),  np.ones_like(s),             1 - s]),
+        (0.50, 0.75, lambda s: np.c_[s,                 np.ones_like(s),  np.zeros_like(s)]),
+        (0.75, 1.00, lambda s: np.c_[np.ones_like(s),             1 - s,  np.zeros_like(s)]),
+    ]
+    for lo, hi, rgb_fn in bands:
+        mask = (t >= lo) & (t < hi if hi < 1.0 else t <= hi)
+        s = (t[mask] - lo) / (hi - lo)
+        colors[mask] = rgb_fn(s)
+    return colors
 
 
 def set_view(vis, dist=100., theta=np.pi/6.):
@@ -53,6 +86,7 @@ if __name__ == "__main__":
     # Visualize results
     vis = o3d.visualization.Visualizer()
     vis.create_window()
+    vis.get_render_option().point_size = args.point_size
 
     # Add geometries to map
     filenames = os.listdir(objects_dir)
@@ -66,13 +100,17 @@ if __name__ == "__main__":
         mesh.transform(pose)
         mesh.paint_uniform_color(color_table[obj_id % len(color_table)])
         vis.add_geometry(mesh)
-    # Add background points
-    with open(os.path.join(args.map_dir, "MapPoints.txt"), "r") as f_pts:
-        lines = f_pts.readlines()
-        pts = []
-        for line in lines:
-            pts += [[float(x) for x in line.strip().split(" ")]]
-        pts = np.asarray(pts)
+    # Add background points — tries raw float32 binary, then .npy, then .txt
+    bin_path = os.path.join(args.map_dir, "LidarPoints.bin")
+    npy_path = os.path.join(args.map_dir, "LidarPoints.npy")
+    txt_path = os.path.join(args.map_dir, "LidarPoints.txt")
+    if os.path.exists(bin_path):
+        pts = np.fromfile(bin_path, dtype=np.float32).reshape(-1, 3).astype(np.float64)
+    elif os.path.exists(npy_path):
+        pts = np.load(npy_path).astype(np.float64)
+    else:
+        with open(txt_path, "r") as f_pts:
+            pts = np.array([[float(x) for x in line.strip().split()] for line in f_pts])
     # remove some extreme points
     xmin = 1.5 * np.percentile(pts[:, 0], 5)
     xmax = 1.5 * np.percentile(pts[:, 0], 95)
@@ -82,8 +120,11 @@ if __name__ == "__main__":
     zmax = 1.5 * np.percentile(pts[:, 2], 95)
     mask = (pts[:, 0] > xmin) & (pts[:, 0] < xmax) & (pts[:, 1] > ymin) & (pts[:, 1] < ymax) & (pts[:, 2] > zmin) & (pts[:, 2] < zmax)
     pts = pts[mask, :]
-    # add points to visualizer
-    colors = np.zeros_like(pts)
+    if args.display_voxel_size is not None:
+        before = len(pts)
+        pts = voxel_downsample(pts, args.display_voxel_size)
+        print(f"Display downsampling: {before:,} → {len(pts):,} points")
+    colors = height_colormap(pts, axis=args.height_axis)
     map_pcd = o3d.geometry.PointCloud()
     map_pcd.points = o3d.utility.Vector3dVector(pts)
     map_pcd.colors = o3d.utility.Vector3dVector(colors)

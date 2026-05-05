@@ -45,15 +45,15 @@ if __name__ == "__main__":
 
     with open(os.path.join(map_dir, "MapObjects.txt")) as f:
         lines = f.readlines()
-        N = int(len(lines) / 3)
+        N = int(len(lines) / 4)
         for i in range(N):
-            obj_id = int(lines[3 * i])
-            line_pose = lines[3 * i + 1]
+            obj_id = int(lines[4 * i])
+            line_pose = lines[4 * i + 1]
             pose = np.asarray([float(x) for x in line_pose.strip().split(" ")]).reshape(3, 4)
             pose = np.concatenate([pose, np.array([0., 0., 0., 1.]).reshape(1, 4)], axis=0)
             np.save(os.path.join(save_dir, "%d.npy" % obj_id), pose)
             code = []
-            line_code = lines[3 * i + 2]
+            line_code = lines[4 * i + 2]
             for item in line_code.strip().split(" "):
                 if len(item) > 0:
                     code += [float(item)]

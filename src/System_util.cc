@@ -142,6 +142,17 @@ void System::SaveEntireMap(const string &dir) {
               Two(1, 0) << " " << Two(1, 1) << " " << Two(1, 2) << " " << Two(1, 3) << " " <<
               Two(2, 0) << " " << Two(2, 1) << " " << Two(2, 2) << " " << Two(2, 3) << endl;
         f_obj << setprecision(9) << pMO->GetShapeCode().transpose() << endl;
+
+        // float xmin = vertices.col(0).minCoeff();
+        // float xmax = vertices.col(0).maxCoeff();
+        // float ymin = vertices.col(1).minCoeff();
+        // float ymax = vertices.col(1).maxCoeff();
+        // float zmin = vertices.col(2).minCoeff();
+        // float zmax = vertices.col(2).maxCoeff();
+
+        // w = (xmax - xmin) * scale;
+        // h = (ymax - ymin) * scale;
+        // l = (zmax - zmin) * scale;
     }
     f_obj.close();
 

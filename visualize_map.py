@@ -32,8 +32,26 @@ def config_parser():
                         help='Rendered point size (default: 1.0)')
     parser.add_argument('--height-axis', type=str, default='-y',
                         choices=['x', 'y', 'z', '-x', '-y', '-z'],
-                        help='World axis used as height for coloring (default: -y for KITTI camera convention)')
+                        help='World axis used as height for coloring')
+    parser.add_argument('--black-points', action='store_true',
+                        help='Display background points in black instead of height color grading')
     return parser
+
+
+def load_map_objects(path):
+    objects = []
+    with open(path, 'r') as f:
+        lines = [l.strip() for l in f if l.strip()]
+    i = 0
+    while i + 3 <= len(lines) - 1:
+        obj_id = int(lines[i])
+        pose_vals = [float(x) for x in lines[i + 1].split()]
+        # lines[i + 2] is the latent code — skip
+        box_vals = [float(x) for x in lines[i + 3].split()]
+        pose = np.array(pose_vals).reshape(3, 4)
+        objects.append((obj_id, pose[:, :3], pose[:, 3], np.array(box_vals)))
+        i += 4
+    return objects
 
 
 def voxel_downsample(points, voxel_size):
@@ -89,17 +107,25 @@ if __name__ == "__main__":
     vis.get_render_option().point_size = args.point_size
 
     # Add geometries to map
-    filenames = os.listdir(objects_dir)
-    for item in filenames:
-        if not item.endswith("ply"):
-            continue
-        obj_id = int(item.split(".")[0])
-        mesh = o3d.io.read_triangle_mesh(os.path.join(objects_dir, "%d.ply" % obj_id))
-        mesh.compute_vertex_normals()
-        pose = np.load(os.path.join(objects_dir, "%d.npy" % obj_id))
-        mesh.transform(pose)
-        mesh.paint_uniform_color(color_table[obj_id % len(color_table)])
-        vis.add_geometry(mesh)
+    # filenames = os.listdir(objects_dir)
+    # for item in filenames:
+    #     if not item.endswith("ply"):
+    #         continue
+    #     obj_id = int(item.split(".")[0])
+    #     mesh = o3d.io.read_triangle_mesh(os.path.join(objects_dir, "%d.ply" % obj_id))
+    #     mesh.compute_vertex_normals()
+    #     pose = np.load(os.path.join(objects_dir, "%d.npy" % obj_id))
+    #     mesh.transform(pose)
+    #     mesh.paint_uniform_color(color_table[obj_id % len(color_table)])
+    #     vis.add_geometry(mesh)
+
+    # Draw oriented bounding boxes from MapObjects.txt if present
+    map_objects_path = os.path.join(args.map_dir, "MapObjects.txt")
+    if os.path.exists(map_objects_path):
+        for obj_id, R, t, box_size in load_map_objects(map_objects_path):
+            obb = o3d.geometry.OrientedBoundingBox(center=t, R=R, extent=box_size)
+            obb.color = color_table[obj_id % len(color_table)]
+            vis.add_geometry(obb)
     # Add background points — tries raw float32 binary, then .npy, then .txt
     bin_path = os.path.join(args.map_dir, "LidarPoints.bin")
     npy_path = os.path.join(args.map_dir, "LidarPoints.npy")
@@ -124,7 +150,7 @@ if __name__ == "__main__":
         before = len(pts)
         pts = voxel_downsample(pts, args.display_voxel_size)
         print(f"Display downsampling: {before:,} → {len(pts):,} points")
-    colors = height_colormap(pts, axis=args.height_axis)
+    colors = np.zeros((len(pts), 3)) if args.black_points else height_colormap(pts, axis=args.height_axis)
     map_pcd = o3d.geometry.PointCloud()
     map_pcd.points = o3d.utility.Vector3dVector(pts)
     map_pcd.colors = o3d.utility.Vector3dVector(colors)

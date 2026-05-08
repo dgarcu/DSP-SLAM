@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>
 #
 
+import collections
 import numpy as np
 import os
 import cv2
@@ -23,10 +24,13 @@ from reconstruct.loss_utils import get_rays, get_time
 from reconstruct.utils import ForceKeyErrorDict, read_calib_file, load_velo_scan
 from reconstruct import get_detectors
 
+KITTI_CLASS_NAMES = {0: "Car", 1: "Pedestrian", 2: "Cyclist"}
+
 
 class FrameWithLiDAR:
     def __init__(self, sequence, frame_id):
         # Load sequence properties
+        self.sequence = sequence
         self.configs = sequence.configs
         self.rgb_dir = sequence.rgb_dir
         self.velo_dir = sequence.velo_dir
@@ -147,6 +151,7 @@ class FrameWithLiDAR:
 
             # Initialize detected instance
             instance = ForceKeyErrorDict()
+            instance.obj_class = int(obj_class)
             instance.T_cam_obj = T_cam_obj
             instance.scale = size
             instance.surface_points = pts_surface_cam.astype(np.float32)
@@ -178,14 +183,17 @@ class FrameWithLiDAR:
         # Occlusion masks
         occ_mask = np.full([img_h, img_w], False, dtype=np.bool)
         prev_mask = None
-        n_behind = 0
-        n_no_overlap = 0
-        n_mask_too_small = 0
-        n_with_rays = 0
+        n_total          = self.sequence.n_total
+        n_behind         = self.sequence.n_behind
+        n_no_overlap     = self.sequence.n_no_overlap
+        n_mask_too_small = self.sequence.n_mask_too_small
+        n_with_rays      = self.sequence.n_with_rays
 
         for inst_idx, instance in enumerate(self.instances):
+            cls = instance.obj_class
+            n_total[cls] += 1
             if not instance.is_front:
-                n_behind += 1
+                n_behind[cls] += 1
                 continue
             # Project LiDAR points to image plane
             surface_points = instance.surface_points
@@ -216,9 +224,9 @@ class FrameWithLiDAR:
                     # rays contains all, but depth should only contain foreground
                     instance.rays = get_rays(pixels_inside_bb, self.invK).astype(np.float32)
                     instance.depth = surface_points[:, 2].astype(np.float32)
-                    n_with_rays += 1
+                    n_with_rays[cls] += 1
                 else:
-                    n_mask_too_small += 1
+                    n_mask_too_small[cls] += 1
 
                 # Create occlusion mask
                 if prev_mask is not None:
@@ -226,11 +234,8 @@ class FrameWithLiDAR:
                 instance.occ_mask = occ_mask
                 prev_mask = masks_2d[n, ...]
             else:
-                n_no_overlap += 1
+                n_no_overlap[cls] += 1
 
-        print(f"  Frame {self.frame_id} summary: {len(self.instances)} 3D dets → "
-              f"{n_behind} behind camera, {n_no_overlap} no overlap, "
-              f"{n_mask_too_small} mask too small, {n_with_rays} fully used")
 
 
 class KITIISequence:
@@ -253,6 +258,28 @@ class KITIISequence:
         self.detector_2d, self.detector_3d = get_detectors(self.configs)
         self.current_frame = None
         self.detections_in_current_frame = None
+        # Sequence-wide detection counters (accumulated across all frames)
+        self.n_total          = collections.defaultdict(int)
+        self.n_behind         = collections.defaultdict(int)
+        self.n_no_overlap     = collections.defaultdict(int)
+        self.n_mask_too_small = collections.defaultdict(int)
+        self.n_with_rays      = collections.defaultdict(int)
+
+    def print_summary(self):
+        cls_name = lambda c: KITTI_CLASS_NAMES.get(c, f"Class{c}")
+        all_classes = sorted(self.n_total.keys())
+        if not all_classes:
+            print("\nNo detections processed.")
+            return
+        col_w = max(len(cls_name(c)) for c in all_classes)
+        header = f"  {'Class':<{col_w}}  {'Total':>5}  {'Behind':>6}  {'No Overlap':>10}  {'Small Mask':>10}  {'Accepted':>8}"
+        print("\n=== Sequence detection summary ===")
+        print(header)
+        print("  " + "-" * (len(header) - 2))
+        for c in all_classes:
+            print(f"  {cls_name(c):<{col_w}}  {self.n_total[c]:>5}  {self.n_behind[c]:>6}  "
+                  f"{self.n_no_overlap[c]:>10}  {self.n_mask_too_small[c]:>10}  {self.n_with_rays[c]:>8}")
+        print()
 
     def load_calib(self):
         """Load and compute intrinsic and extrinsic calibration parameters."""

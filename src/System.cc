@@ -369,6 +369,7 @@ void System::Shutdown()
         pangolin::BindToContext("ORB-SLAM2: Map Viewer");
 
     PyGILState_Ensure();
+    pySequence.attr("print_summary")();
 }
 
 void System::SaveTrajectoryTUM(const string &filename)

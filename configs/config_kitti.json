@@ -1,8 +1,8 @@
 {
   "data_type": "KITTI",
-  "detect_online": true,
-  "path_label_3d": "/media/jingwen/Data/kitti_odom/dataset/sequences/07/labels/pointpillars_labels",
-  "path_label_2d": "/media/jingwen/Data/kitti_odom/dataset/sequences/07/labels/maskrcnn_labels",
+  "detect_online": false,
+  "path_label_3d": "seq7/3d",
+  "path_label_2d": "seq7/2d",
   "Detector3D": {
     "config_path": "configs/config_pointpillars.py",
     "weight_path": "weights/pointpillars/model.pth"
@@ -11,8 +11,8 @@
     "config_path": "configs/config_maskrcnn.py",
     "weight_path": "weights/maskrcnn/model.pth"
   },
-  "min_bb_area": 1600,
-  "min_mask_area": 1000,
+  "min_bb_area": 160,
+  "min_mask_area": 100,
   "downsample_ratio": 4.0,
   "num_lidar_max": 250,
   "num_lidar_min": 10,

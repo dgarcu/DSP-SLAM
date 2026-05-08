@@ -59,6 +59,14 @@ void System::SaveMapCurrentFrame(const string &dir, int frameId) {
               Two(1, 0) << " " << Two(1, 1) << " " << Two(1, 2) << " " << Two(1, 3) << " " <<
               Two(2, 0) << " " << Two(2, 1) << " " << Two(2, 2) << " " << Two(2, 3) << endl;
         f_obj << setprecision(9) << pMO->GetShapeCode().transpose() << endl;
+        if (pMO->vertices.rows() > 10) {
+            float w = (pMO->vertices.col(0).maxCoeff() - pMO->vertices.col(0).minCoeff()) * pMO->scale;
+            float h = (pMO->vertices.col(1).maxCoeff() - pMO->vertices.col(1).minCoeff()) * pMO->scale;
+            float l = (pMO->vertices.col(2).maxCoeff() - pMO->vertices.col(2).minCoeff()) * pMO->scale;
+            f_obj << setprecision(6) << w << " " << h << " " << l << endl;
+        } else {
+            f_obj << pMO->w << " " << pMO->h << " " << pMO->l << endl;
+        }
     }
     f_obj.close();
 
@@ -142,17 +150,14 @@ void System::SaveEntireMap(const string &dir) {
               Two(1, 0) << " " << Two(1, 1) << " " << Two(1, 2) << " " << Two(1, 3) << " " <<
               Two(2, 0) << " " << Two(2, 1) << " " << Two(2, 2) << " " << Two(2, 3) << endl;
         f_obj << setprecision(9) << pMO->GetShapeCode().transpose() << endl;
-
-        // float xmin = vertices.col(0).minCoeff();
-        // float xmax = vertices.col(0).maxCoeff();
-        // float ymin = vertices.col(1).minCoeff();
-        // float ymax = vertices.col(1).maxCoeff();
-        // float zmin = vertices.col(2).minCoeff();
-        // float zmax = vertices.col(2).maxCoeff();
-
-        // w = (xmax - xmin) * scale;
-        // h = (ymax - ymin) * scale;
-        // l = (zmax - zmin) * scale;
+        if (pMO->vertices.rows() > 10) {
+            float w = (pMO->vertices.col(0).maxCoeff() - pMO->vertices.col(0).minCoeff()) * pMO->scale;
+            float h = (pMO->vertices.col(1).maxCoeff() - pMO->vertices.col(1).minCoeff()) * pMO->scale;
+            float l = (pMO->vertices.col(2).maxCoeff() - pMO->vertices.col(2).minCoeff()) * pMO->scale;
+            f_obj << setprecision(6) << w << " " << h << " " << l << endl;
+        } else {
+            f_obj << pMO->w << " " << pMO->h << " " << pMO->l << endl;
+        }
     }
     f_obj.close();
 
